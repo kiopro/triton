@@ -4,16 +4,6 @@ Pure Elixir Cassandra ORM built on top of Xandra.
 
 [Blog Post](https://blog.sleeperbot.com/triton-a-cassandra-orm-for-elixir-882dd8f11383)
 
-## Add Triton to your deps
-
-Add triton to your deps.
-
-```elixir
-def deps() do
-  [{:triton, "~> 0.2"}]
-end
-```
-
 ## Configure Triton
 
 Single Cluster
@@ -27,9 +17,7 @@ config :triton,
       pool: Xandra.Cluster,
       underlying_pool: DBConnection.Poolboy,
       pool_size: 10,
-      keyspace: "my_keyspace",
-      health_check_delay: 2500,  # optional: (default is 5000)
-      health_check_interval: 500  # optional: (default is 1000)
+      keyspace: "my_keyspace"
     ]
   ]
 ```
@@ -45,9 +33,7 @@ config :triton,
       pool: Xandra.Cluster,
       underlying_pool: DBConnection.Poolboy,
       pool_size: 10,
-      keyspace: "cluster_1_keyspace",
-      health_check_delay: 2500,  # optional: (default is 5000)
-      health_check_interval: 500  # optional: (default is 1000)
+      keyspace: "cluster_1_keyspace"
     ],
     [
       conn: Cluster2.Conn,
@@ -55,22 +41,16 @@ config :triton,
       pool: Xandra.Cluster,
       underlying_pool: DBConnection.Poolboy,
       pool_size: 10,
-      keyspace: "cluster_2_keyspace",
-      health_check_delay: 2500,  # optional: (default is 5000)
-      health_check_interval: 500  # optional: (default is 1000)
+      keyspace: "cluster_2_keyspace"
     ]
   ]
 ```
 
-## Health Check
-
-If DB gets disconnected, resulting in a DBConnection error, Triton will attempt to reconnect.
-
-You can specify the **health_check_delay** and **health_check_interval** via the config for each cluster.
-
 ## Defining a Keyspace
 
 First, define your keyspace.  Triton will create the keyspace for your at compile time if it does not exist.
+
+Currently Triton only supports a single Keyspace.
 
 ```elixir
 defmodule Schema.Keyspace do
@@ -92,7 +72,7 @@ If you would like Triton to auto-create tables for you at compile time, you must
 
 ```elixir
 defmodule Schema.User do
-  require Schema.Keyspace  
+  require Schema.Keyspace
   use Triton.Table
 
   table :users, keyspace: Schema.Keyspace do
@@ -105,8 +85,6 @@ defmodule Schema.User do
     field :notifications, {:map, "<text, text>"}
     field :friends, {:set, "<text>"}
     field :posts, {:list, "<text>"}
-    field :updated, :timestamp
-    field :created, :timestamp, transform: &Schema.Helper.DateHelper.to_ms/1  # transform field data
     partition_key [:user_id]
   end
 end
@@ -147,7 +125,7 @@ An example of materialized view **users_by_email** with all fields
 
 ```elixir
 defmodule Schema.UserByEmail do
-  require Schema.User  
+  require Schema.User
   use Triton.MaterializedView
 
   materialized_view :users_by_email, from: Schema.User do
@@ -184,7 +162,6 @@ User
 |> select([:user_id, :username])
 |> where(user_id: [in: [1, 2, 3]])
 |> limit(10)
-|> allow_filtering  # you can allow filtering on any query
 |> User.all
 ```
 
@@ -196,40 +173,6 @@ UserByEmail
 |> where(email: "someone@gmail.com")
 |> User.one
 ```
-
-## Comparison / Range Queries
-
-Select messages created before **timestamp**
-
-```elixir
-MessagesByDate
-|> select([:message_id, :text])
-|> where(channel_id: 1, created: ["<=": timestamp])
-|> limit(20)
-|> MessagesByDate.all
-```
-
-Select messages created between **timestamp_a** and **timestamp_b**
-
-```elixir
-MessagesByDate
-|> select([:message_id, :text])
-|> where(channel_id: 1, created: [">=": timestamp_a], created: [<: timestamp_b])
-|> MessagesByDate.all
-```
-
-## Streaming
-
-Stream all messages
-
-```elixir
-MessagesByDate
-|> select(:all)
-|> where(channel_id: 1)
-|> MessagesByDate.stream(page_size: 20)
-```
-
-Which returns {:ok, stream} or {:error, msg}
 
 ## Inserting, Updating, & Deleting
 
@@ -364,40 +307,3 @@ User
 |> where(user_id: 10)
 |> User.save
 ```
-
-## Pre-populating data
-
-You can pre-populate data with Triton at compile time with **Triton.Setup**
-
-```elixir
-defmodule PrepopulateModule do
-  use Triton.Setup
-  import Triton.Query
-  require Schema.User
-  alias Schema.User
-
-  # create an admin user if it doesn't exist
-
-  setup do
-    User
-    |> insert(
-      user_id: @admin_user_id,
-      username: @admin_user_username,
-      display_name: @admin_user_display_name,
-      password: Bcrypt.hashpwsalt(@admin_user_password),
-      email: @admin_user_email,
-      created: @admin_user_created
-    ) |> if_not_exists
-  end
-end
-```
-
-## Automatic Schema Creation
-
-Triton attempts to create your keyspace, tables, and materialized views at compile time if they do not exist.
-
-This means that your build server will need access to your production DB if you want to automatically create your schema in prod.  The alternative is simply to create your production schemas yourself.
-
-## Consistency levels
-
-For dev, you may want to consider running ccm with more than 1 node if you are doing queries at anything more than consistency: :one.
