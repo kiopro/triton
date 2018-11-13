@@ -21,3 +21,5 @@ erl_crash.dump
 
 # The directory Mix will write test generated files to.
 /tmp
+
+.elixir_ls
